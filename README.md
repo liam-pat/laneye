@@ -23,4 +23,4 @@ sudo ./main -I en0
 
 ## Development
 
-* It still to develop
+* It is still developing
