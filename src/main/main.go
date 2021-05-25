@@ -37,7 +37,7 @@ var localIpNet *net.IPNet
 var localMac net.HardwareAddr
 
 // local net interface , maybe wifi eth0
-var localNetInterface string
+var localNetInterfaceName string
 
 // all machine in lan network
 var lanMachines map[string]machineInfo
@@ -47,7 +47,7 @@ var timeCounter *time.Ticker
 var do chan string
 
 func PrintLanMachines() {
-	// []uint32 , as same as the IP struct
+	// []uint32 , as same as the Uint32IP struct
 	var ips IPSlice
 	for ip := range lanMachines {
 		ips = append(ips, ParseIPString(ip))
@@ -62,6 +62,7 @@ func PrintLanMachines() {
 
 		fmt.Printf("%-15s %-17s %-30s %-10s\n", ipUint32.String(), mac, lanMachine.Hostname, lanMachine.FactoryInfo)
 	}
+	fmt.Printf("---------%d machines in lan network----------", len(lanMachines))
 }
 
 func pushMachineInfo(ip string, mac net.HardwareAddr, hostname, factoryInfo string) {
@@ -99,6 +100,8 @@ func setupLocalNetInfo(netInterfaceName string) {
 		localNetInterface, err := net.InterfaceByName(netInterfaceName)
 		if err == nil {
 			localNetInterfaces = append(localNetInterfaces, *localNetInterface)
+		} else {
+			log.Fatal("Get InterfaceByName got error", err)
 		}
 	}
 Loop:
@@ -106,12 +109,12 @@ Loop:
 		addresses, _ := localInterface.Addrs()
 		for _, addr := range addresses {
 			// addr.(*net.IPNet) using addr convert to (*net.IPNet)
-			// netIpNet.IP.IsLoopback() to avoid to get 127.0.0.1
+			// netIpNet.Uint32IP.IsLoopback() to avoid to get 127.0.0.1
 			if netIpNet, ok := addr.(*net.IPNet); ok && !netIpNet.IP.IsLoopback() {
 				if netIpNet.IP.To4() != nil {
 					localIpNet = netIpNet
 					localMac = localInterface.HardwareAddr
-					localNetInterface = localInterface.Name
+					localNetInterfaceName = localInterface.Name
 					break Loop
 				}
 			}
@@ -122,25 +125,14 @@ Loop:
 	}
 }
 
-func sendARP() {
-	ips := Table(localIpNet)
-	for _, ip := range ips {
-		go sendArpPackage(ip)
-	}
-}
-func localHost() {
-	host, _ := os.Hostname()
-	lanMachines[localIpNet.IP.String()] = machineInfo{Mac: localMac, Hostname: strings.TrimSuffix(host, ".local"), FactoryInfo: manuf.Search(localMac.String())}
-}
-
 func main() {
 	// if return 0 ,using the root to run cmd
 	if os.Geteuid() != 0 {
-		log.Fatal("lanScan must run as root.")
+		log.Fatal("lanScan cmd must run as root.")
 	}
 
 	//cmd : go run main.go -I=eth0
-	flag.StringVar(&localNetInterface, "I", "en0", "Network Interface Name")
+	flag.StringVar(&localNetInterfaceName, "I", "en0", "Network Interface Name")
 	flag.Parse()
 
 	// init network data
@@ -148,18 +140,30 @@ func main() {
 	do = make(chan string)
 
 	// init local network info
-	setupLocalNetInfo(localNetInterface)
+	setupLocalNetInfo(localNetInterfaceName)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go listenARP(ctx)
+	go listenARP(ctx) // listen arp start
 	go listenMDNS(ctx)
 	go listenNBNS(ctx)
-	go sendARP()
-	go localHost()
 
-	timeCounter = time.NewTicker(20 * time.Second)
+	// send  arp
+	go func() {
+		ips := IpRangeTable(localIpNet)
+		for _, ip := range ips {
+			go sendArpPackage(ip)
+		}
+	}()
+	// set up local machine to lan machines
+	go func() {
+		host, _ := os.Hostname()
+		lanMachines[localIpNet.IP.String()] = machineInfo{Mac: localMac, Hostname: strings.TrimSuffix(host, ".local"), FactoryInfo: manuf.Search(localMac.String())}
+	}()
+
+	timeCounter = time.NewTicker(50 * time.Second)
 	for {
 		select {
+		// if 20s do not  get all info , cancel context
 		case <-timeCounter.C:
 			PrintLanMachines()
 			cancel()

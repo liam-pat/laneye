@@ -13,7 +13,7 @@ import (
 )
 
 func listenMDNS(ctx context.Context) {
-	handle, err := pcap.OpenLive(localNetInterface, 1024, false, 10 * time.Second)
+	handle, err := pcap.OpenLive(localNetInterfaceName, 1024, false, 10*time.Second)
 	if err != nil {
 		log.Fatal("pcap open fail:", err)
 	}
@@ -22,12 +22,12 @@ func listenMDNS(ctx context.Context) {
 	ps := gopacket.NewPacketSource(handle, handle.LinkType())
 	for {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return
 		case p := <-ps.Packets():
 			if len(p.Layers()) == 4 {
 				c := p.Layers()[3].LayerContents()
-				if c[2] == 0x84 && c[3] == 0x00 && c[6] == 0x00 && c[7] == 0x01{
+				if c[2] == 0x84 && c[3] == 0x00 && c[6] == 0x00 && c[7] == 0x01 {
 					i := p.Layer(layers.LayerTypeIPv4)
 					if i == nil {
 						continue
@@ -47,12 +47,12 @@ func listenMDNS(ctx context.Context) {
 
 func mdns(buffer *Buffer, ip string) {
 	b := buffer.PrependBytes(12)
-	binary.BigEndian.PutUint16(b, uint16(0)) // 0x0000 标识
+	binary.BigEndian.PutUint16(b, uint16(0))          // 0x0000 标识
 	binary.BigEndian.PutUint16(b[2:], uint16(0x0100)) // 标识
-	binary.BigEndian.PutUint16(b[4:], uint16(1)) // 问题数
-	binary.BigEndian.PutUint16(b[6:], uint16(0)) // 资源数
-	binary.BigEndian.PutUint16(b[8:], uint16(0)) // 授权资源记录数
-	binary.BigEndian.PutUint16(b[10:], uint16(0)) // 额外资源记录数
+	binary.BigEndian.PutUint16(b[4:], uint16(1))      // 问题数
+	binary.BigEndian.PutUint16(b[6:], uint16(0))      // 资源数
+	binary.BigEndian.PutUint16(b[8:], uint16(0))      // 授权资源记录数
+	binary.BigEndian.PutUint16(b[10:], uint16(0))     // 额外资源记录数
 	// split string ip to four parts
 	ipList := strings.Split(ip, ".")
 
@@ -63,7 +63,7 @@ func mdns(buffer *Buffer, ip string) {
 
 		b[0] = uint8(len(ip))
 		for i := 0; i < len(ip); i++ {
-			b[i + 1] = uint8(ip[i])
+			b[i+1] = uint8(ip[i])
 		}
 	}
 	b = buffer.PrependBytes(8)
@@ -81,28 +81,27 @@ func mdns(buffer *Buffer, ip string) {
 	binary.BigEndian.PutUint16(b[2:], 1)
 }
 
-func sendMdns(ip IP, mHardwareAddr net.HardwareAddr) {
-	// IP(uint32) ot string eg. 192.168.0.1 to [4]byte
+func sendMdns(ip Uint32IP, mHardwareAddr net.HardwareAddr) {
+	//  eg. 192.168.0.1 to [4]byte
 	srcIp := net.ParseIP(localIpNet.IP.String()).To4()
 	dstIp := net.ParseIP(ip.String()).To4()
 
 	ether := &layers.Ethernet{
-		SrcMAC: localMac,
-		DstMAC: mHardwareAddr,
+		SrcMAC:       localMac,
+		DstMAC:       mHardwareAddr,
 		EthernetType: layers.EthernetTypeIPv4,
 	}
 
 	ip4 := &layers.IPv4{
-		Version: uint8(4),
-		IHL: uint8(5),
-		TTL: uint8(255),
+		Version:  uint8(4),
+		IHL:      uint8(5),
+		TTL:      uint8(255),
 		Protocol: layers.IPProtocolUDP,
-		SrcIP: srcIp,
-		DstIP: dstIp,
+		SrcIP:    srcIp,
+		DstIP:    dstIp,
 	}
 	bf := NewBuffer()
 	mdns(bf, ip.String())
-
 
 	udpPayload := bf.data
 	udp := &layers.UDP{
@@ -110,10 +109,10 @@ func sendMdns(ip IP, mHardwareAddr net.HardwareAddr) {
 		DstPort: layers.UDPPort(5353),
 	}
 	udp.SetNetworkLayerForChecksum(ip4)
-	udp.Payload = udpPayload  // todo
+	udp.Payload = udpPayload // todo
 	buffer := gopacket.NewSerializeBuffer()
 	opt := gopacket.SerializeOptions{
-		FixLengths: true,       // 自动计算长度
+		FixLengths:       true, // 自动计算长度
 		ComputeChecksums: true, // 自动计算checksum
 	}
 	err := gopacket.SerializeLayers(buffer, opt, ether, ip4, udp, gopacket.Payload(udpPayload))
@@ -122,7 +121,7 @@ func sendMdns(ip IP, mHardwareAddr net.HardwareAddr) {
 	}
 	outgoingPacket := buffer.Bytes()
 
-	handle, err := pcap.OpenLive(localNetInterface, 1024, false, 10 * time.Second)
+	handle, err := pcap.OpenLive(localNetInterfaceName, 1024, false, 10*time.Second)
 	if err != nil {
 		log.Fatal("pcap打开失败:", err)
 	}
@@ -142,11 +141,11 @@ func ParseMdns(data []byte) string {
 
 	for s := i - 1; s > 1; s-- {
 		num := i - s
-		if s - 2 < 0 {
+		if s-2 < 0 {
 			break
 		}
 		// 包括 .local_ 7 个字符
-		if bto16([]byte{data[s - 2], data[s - 1]}) == uint16(num + 7) {
+		if bto16([]byte{data[s-2], data[s-1]}) == uint16(num+7) {
 			return Reverse(buf.String())
 		}
 		buf.WriteByte(data[s])
@@ -159,5 +158,5 @@ func bto16(b []byte) uint16 {
 	if len(b) != 2 {
 		log.Fatal("b just can 2 byte")
 	}
-	return uint16(b[0]) << 8 + uint16(b[1])
+	return uint16(b[0])<<8 + uint16(b[1])
 }

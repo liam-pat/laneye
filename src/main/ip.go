@@ -8,9 +8,9 @@ import (
 	"strings"
 )
 
-type IP uint32
+type Uint32IP uint32
 
-func (ip IP) String() string {
+func (ip Uint32IP) String() string {
 	var bf bytes.Buffer
 	for i := 1; i <= 4; i++ {
 		bf.WriteString(strconv.Itoa(int((ip >> ((4 - uint(i)) * 8)) & 0xff)))
@@ -21,7 +21,7 @@ func (ip IP) String() string {
 	return bf.String()
 }
 
-func (ip IP) ipInt32ToString() string {
+func (ip Uint32IP) ipInt32ToString() string {
 	bitStr := ""
 	ipStr := ""
 	for ; ip > 0; ip /= 2 {
@@ -49,30 +49,37 @@ func (ip IP) ipInt32ToString() string {
 	return ipStr
 }
 
-func Table(ipNet *net.IPNet) []IP {
+func IpRangeTable(ipNet *net.IPNet) []Uint32IP {
 	ip := ipNet.IP.To4()
-	log.Info("本机ip:", ip)
-	var min, max IP
-	var data []IP
+	log.Info("local ip:", ip)
+
+	var min, max Uint32IP
+	var lanNetworkIps []Uint32IP
+
 	for i := 0; i < 4; i++ {
-		b := IP(ip[i] & ipNet.Mask[i])
+		// ip : 192.168.10.200  netmask : 255.255.255.0
+		// (192 << 24) + (168 << 16) + (10 << 8) + (0 << 0) = 3232238080
+		b := Uint32IP(ip[i] & ipNet.Mask[i])
 		min += b << ((3 - uint(i)) * 8)
 	}
-	one, _ := ipNet.Mask.Size()
-	max = min | IP(math.Pow(2, float64(32 - one)) - 1)
-	log.Infof("local network IP范 range :%s --- %s", min, max)
-	// i & 0x000000ff  == 0 是尾段为0的IP，根据RFC的规定，忽略
+	// ipNet.Mask.Size() 24 , 11111111.111111111.11111111.00000000
+	maskSize, _ := ipNet.Mask.Size()
+	// ~maskSize , 00000000.00000000.00000000.11111111 - 1
+	max = min | Uint32IP(math.Pow(2, float64(32-maskSize))-1)
+
+	log.Infof("local Network IP Range :%s --- %s", min, max)
 	for i := min; i < max; i++ {
-		if i & 0x000000ff == 0 {
+		// 192.168.10.0 , 192.168.10.255
+		if i&0x000000ff == 0 || i&0x000000ff == 255 {
 			continue
 		}
-		data = append(data, i)
+		lanNetworkIps = append(lanNetworkIps, i)
 	}
-	return data
+	return lanNetworkIps
 }
 
-// IPSlice uint32 IP define function
-type IPSlice []IP
+// IPSlice uint32 Uint32IP define function
+type IPSlice []Uint32IP
 
 func (ip IPSlice) Len() int {
 	return len(ip)
@@ -84,7 +91,7 @@ func (ip IPSlice) Less(i, j int) bool {
 	return ip[i] < ip[j]
 }
 
-func ParseIPString(s string) IP{
+func ParseIPString(s string) Uint32IP {
 	var b []byte
 	for _, i := range strings.Split(s, ".") {
 		v, _ := strconv.Atoi(i)
@@ -94,6 +101,6 @@ func ParseIPString(s string) IP{
 }
 
 // ParseIP convert [4]byte to uint32
-func ParseIP(b []byte) IP {
-	return IP(IP(b[0]) << 24 + IP(b[1]) << 16 + IP(b[2]) << 8 + IP(b[3]))
+func ParseIP(b []byte) Uint32IP {
+	return Uint32IP(Uint32IP(b[0])<<24 + Uint32IP(b[1])<<16 + Uint32IP(b[2])<<8 + Uint32IP(b[3]))
 }

@@ -12,7 +12,8 @@ import (
 )
 
 func listenARP(context context.Context) {
-	handle, err := pcap.OpenLive(localNetInterface, 1024, false, 10*time.Second)
+	const WaitSecond = 5
+	handle, err := pcap.OpenLive(localNetInterfaceName, 1024, false, WaitSecond*time.Second)
 	defer handle.Close()
 
 	err = handle.SetBPFFilter("arp")
@@ -23,16 +24,18 @@ func listenARP(context context.Context) {
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for {
 		select {
+		// the main cro process call context cancel , exit
 		case <-context.Done():
 			return
 		case packet := <-packetSource.Packets():
 			arp := packet.Layer(layers.LayerTypeARP).(*layers.ARP)
-
+			// 2 return package
 			if arp.Operation == 2 {
 				mac := net.HardwareAddr(arp.SourceHwAddress)
 				factoryInfo := manuf.Search(mac.String())
 				pushMachineInfo(ParseIP(arp.SourceProtAddress).String(), mac, "", factoryInfo)
 
+				// to send package to get hostname
 				if strings.Contains(factoryInfo, "Apple") {
 					go sendMdns(ParseIP(arp.SourceProtAddress), mac)
 				} else {
@@ -43,7 +46,8 @@ func listenARP(context context.Context) {
 	}
 }
 
-func sendArpPackage(ip IP) {
+func sendArpPackage(ip Uint32IP) {
+	// uint32 convert to []byte
 	srcIp := net.ParseIP(localIpNet.IP.String()).To4()
 	dstIp := net.ParseIP(ip.String()).To4()
 	if srcIp == nil || dstIp == nil {
@@ -51,29 +55,35 @@ func sendArpPackage(ip IP) {
 	}
 	// EthernetType 0x0806  ARP
 	ether := &layers.Ethernet{
-		SrcMAC: localMac,
-		DstMAC: net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		SrcMAC:       localMac,
+		DstMAC:       net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 		EthernetType: layers.EthernetTypeARP,
 	}
 
-	a := &layers.ARP{
-		AddrType: layers.LinkTypeEthernet,
-		Protocol: layers.EthernetTypeIPv4,
-		HwAddressSize: uint8(6),
-		ProtAddressSize: uint8(4),
-		Operation: uint16(1), // 0x0001 arp request 0x0002 arp response
-		SourceHwAddress: localMac,
+	arpStruct := &layers.ARP{
+		AddrType:          layers.LinkTypeEthernet,
+		Protocol:          layers.EthernetTypeIPv4,
+		HwAddressSize:     uint8(6),  // mac has 6 byte
+		ProtAddressSize:   uint8(4),  // ip has 4 byte
+		Operation:         uint16(1), // 0x0001 arp request 0x0002 arp response
+		SourceHwAddress:   localMac,
 		SourceProtAddress: srcIp,
-		DstHwAddress: net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-		DstProtAddress: dstIp,
+		DstHwAddress:      net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		DstProtAddress:    dstIp,
 	}
 
-	buffer := gopacket.NewSerializeBuffer()
-	var opt gopacket.SerializeOptions
-	gopacket.SerializeLayers(buffer, opt, ether, a)
-	outgoingPacket := buffer.Bytes()
+	// got the &serializeBuffer
+	serializeBuffer := gopacket.NewSerializeBuffer()
+	var options gopacket.SerializeOptions
+	err := gopacket.SerializeLayers(serializeBuffer, options, ether, arpStruct)
+	if err != nil {
+		log.Fatal("init the arp package error:", err)
+	}
 
-	handle, err := pcap.OpenLive(localNetInterface, 2048, false, 30 * time.Second)
+	// get the struct serializeBuffer data slice
+	outgoingPacket := serializeBuffer.Bytes()
+
+	handle, err := pcap.OpenLive(localNetInterfaceName, 2048, false, 30*time.Second)
 	if err != nil {
 		log.Fatal("pcap open fail:", err)
 	}
@@ -84,4 +94,3 @@ func sendArpPackage(ip IP) {
 		log.Fatal("send arp package fail..")
 	}
 }
-
