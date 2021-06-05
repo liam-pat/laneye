@@ -7,7 +7,6 @@ import (
 	"github.com/google/gopacket/pcap"
 	manuf "github.com/timest/gomanuf"
 	"net"
-	"strings"
 	"time"
 )
 
@@ -29,18 +28,11 @@ func listenARP(context context.Context) {
 			return
 		case packet := <-packetSource.Packets():
 			arp := packet.Layer(layers.LayerTypeARP).(*layers.ARP)
-			// 2 return package
+			// 2 sign return package
 			if arp.Operation == 2 {
 				mac := net.HardwareAddr(arp.SourceHwAddress)
 				factoryInfo := manuf.Search(mac.String())
 				pushMachineInfo(ParseIP(arp.SourceProtAddress).String(), mac, "", factoryInfo)
-
-				// to send package to get hostname
-				if strings.Contains(factoryInfo, "Apple") {
-					go sendMdns(ParseIP(arp.SourceProtAddress), mac)
-				} else {
-					go sendNbns(ParseIP(arp.SourceProtAddress), mac)
-				}
 			}
 		}
 	}

@@ -46,6 +46,54 @@ var timeCounter *time.Ticker
 
 var do chan string
 
+func main() {
+	// if return 0 ,using the root to run cmd
+	if os.Geteuid() != 0 {
+		log.Fatal("lanScan cmd must run as root.")
+	}
+	//cmd : go run main.go -I=eth0
+	flag.StringVar(&localNetInterfaceName, "I", "en0", "Network Interface Name")
+	flag.Parse()
+
+	// init network data
+	lanMachines = make(map[string]machineInfo)
+	do = make(chan string)
+
+	// init local network info
+	setupLocalNetInfo(localNetInterfaceName)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go listenARP(ctx) // listen arp start , and receipt one rep , will send mdns or nBns to deep get host name
+
+	go func() {
+		ips := IpRangeTable(localIpNet)
+		for _, ip := range ips {
+			go sendArpPackage(ip)
+		}
+	}()
+	go func() {
+		host, _ := os.Hostname()
+		lanMachines[localIpNet.IP.String()] = machineInfo{Mac: localMac, Hostname: strings.TrimSuffix(host, ".local"), FactoryInfo: manuf.Search(localMac.String())}
+	}()
+	timeCounter = time.NewTicker(50 * time.Second)
+	for {
+		select {
+		// if 20s do not  get all info , cancel context
+		case <-timeCounter.C:
+			PrintLanMachines()
+			cancel()
+			return
+		case d := <-do:
+			switch d {
+			case START:
+				timeCounter.Stop()
+			case END:
+				timeCounter = time.NewTicker(2 * time.Second)
+			}
+		}
+	}
+}
+
 func PrintLanMachines() {
 	// []uint32 , as same as the Uint32IP struct
 	var ips IPSlice
@@ -122,59 +170,5 @@ Loop:
 	}
 	if localIpNet == nil || len(localMac) == 0 {
 		log.Fatal("Cannot get the local machine network information")
-	}
-}
-
-func main() {
-	// if return 0 ,using the root to run cmd
-	if os.Geteuid() != 0 {
-		log.Fatal("lanScan cmd must run as root.")
-	}
-
-	//cmd : go run main.go -I=eth0
-	flag.StringVar(&localNetInterfaceName, "I", "en0", "Network Interface Name")
-	flag.Parse()
-
-	// init network data
-	lanMachines = make(map[string]machineInfo)
-	do = make(chan string)
-
-	// init local network info
-	setupLocalNetInfo(localNetInterfaceName)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go listenARP(ctx) // listen arp start
-	go listenMDNS(ctx)
-	go listenNBNS(ctx)
-
-	// send  arp
-	go func() {
-		ips := IpRangeTable(localIpNet)
-		for _, ip := range ips {
-			go sendArpPackage(ip)
-		}
-	}()
-	// set up local machine to lan machines
-	go func() {
-		host, _ := os.Hostname()
-		lanMachines[localIpNet.IP.String()] = machineInfo{Mac: localMac, Hostname: strings.TrimSuffix(host, ".local"), FactoryInfo: manuf.Search(localMac.String())}
-	}()
-
-	timeCounter = time.NewTicker(50 * time.Second)
-	for {
-		select {
-		// if 20s do not  get all info , cancel context
-		case <-timeCounter.C:
-			PrintLanMachines()
-			cancel()
-			return
-		case d := <-do:
-			switch d {
-			case START:
-				timeCounter.Stop()
-			case END:
-				timeCounter = time.NewTicker(2 * time.Second)
-			}
-		}
 	}
 }
