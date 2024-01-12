@@ -1,28 +1,24 @@
-# Scan Lan network
+# Lan scan
 
-## Some network knowledge 
+## Purpose
 
-* Lan-network calculation. [Reference](https://blog.biyongyao.com/tech/ip-subnet-mask.html)
+> Find out all the devices that are on the same network as you.
 
-## Aim
+* Avoid equipment with hidden cameras
+* Find out the connection machine ip and mac for pinging it
 
-1. Learn the network knowledge
-2. Scan the local network to find other illegal machine
-3. Use golang more Familiarly for developing.
+## Network Knowledge
 
-## Use Method
+* Lan-network calculation. [Reference](https://blog.biyongyao.com/network/ip-subnet-mask.html)
+
+## Usage
 
 ```
-#clone the responsity
-git clone https://github.com/YaoMiss/go-lanscan.git
-
-# build 
-cd {{ DIR }}/src/main
-go build 
-
-# exec , the net interface maybe eth0
-sudo ./main -I en0
+bash > git clone https://github.com/YaoMiss/go-lanscan.git
+bash > go build 
+bash > sudo ./lanscan-go 
 ```
 
-## Todo
-* Add the method to get all lan-network machines hostname
+## todo
+
+* Enhance the vendor name mapping 
