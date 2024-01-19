@@ -4,11 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/YaoMiss/macmap"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"github.com/sirupsen/logrus"
-	manuf "github.com/timest/gomanuf"
 	"net"
 	"os"
 	"packie/lanscan-go/network"
@@ -100,7 +100,12 @@ func main() {
 
 	go func() {
 		host, _ := os.Hostname()
-		machines[localIPNet.IP.String()] = machineInfo{MacAddress: localMacAddress, Hostname: strings.TrimSuffix(host, ".local"), FactoryInfo: manuf.Search(localMacAddress.String())}
+		//vendorInfo := manuf.Search(localMacAddress.String())
+		vendorInfo := macmap.Search(localMacAddress.String())
+		machines[localIPNet.IP.String()] = machineInfo{
+			MacAddress: localMacAddress,
+			Hostname:   strings.TrimSuffix(host, ".local"), FactoryInfo: vendorInfo,
+		}
 	}()
 	timeCounter := time.NewTicker(10 * time.Second)
 
@@ -137,7 +142,9 @@ func listenARPPackets(listenInterfaceName string, context context.Context, pushM
 			// https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml
 			if arp.Operation == layers.ARPReply {
 				mac := net.HardwareAddr(arp.SourceHwAddress)
-				factoryInfo := manuf.Search(mac.String())
+				//factoryInfo := manuf.Search(mac.String())
+				factoryInfo := macmap.Search(mac.String())
+
 				pushMachineInfo(network.ParseIP2Uint32(arp.SourceProtAddress).String(), mac, "", factoryInfo, pushMachineInfoSignal)
 			}
 		}
