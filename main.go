@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"packie/lanscan-go/network"
+	"packie/lanscan-go/utils"
 	"sort"
 	"strings"
 	"sync"
@@ -34,76 +35,44 @@ var log = logrus.New()
 var machines map[string]machineInfo
 
 func main() {
-
-	//if os.Geteuid() != 0 {
-	//	log.Fatal("Linux/Unix cannot get the root permission")
-	//}
-
-	var localIPNet *net.IPNet
-	var localMacAddress net.HardwareAddr
+	var interfaceName string
+	flag.StringVar(&interfaceName, "interface", "", "ur net lan")
+	flag.Parse()
 
 	var lanNames = make([]string, 0)
 
-	var scanNetInterfaceName string
-	flag.StringVar(&scanNetInterfaceName, "interface", "", "Scan machine network interface")
-	flag.Parse()
-
 	machines = make(map[string]machineInfo)
 	pushMachineInfoSignal := make(chan string)
+	networkInfo := utils.GetIPnMacFromInterface(interfaceName, &lanNames)
 
-	var localNetworkInterfaces []net.Interface
+	//fmt.Println(strings.Repeat("####", 5) + " interfaces: " + lanNames[0])
+	//fmt.Println(strings.Repeat("####", 5) + " sudo go run main.go -interface=" + lanNames[0])
 
-	if scanNetInterfaceName == "" {
-		localNetworkInterfaces, _ = net.Interfaces()
-	} else {
-		localNetInterface, err := net.InterfaceByName(scanNetInterfaceName)
-		if err != nil {
-			log.Fatal(fmt.Sprintf("%s network interface cannot be found", scanNetInterfaceName), err)
-		}
-		localNetworkInterfaces = append(localNetworkInterfaces, *localNetInterface)
-	}
-	for _, localNetworkInterface := range localNetworkInterfaces {
-		addresses, _ := localNetworkInterface.Addrs()
-		for _, addr := range addresses {
-			if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
-				if ipNet.IP.To4() != nil {
-					if localNetworkInterface.Name != "" && localNetworkInterface.HardwareAddr != nil {
-						localIPNet = ipNet
-						localMacAddress = localNetworkInterface.HardwareAddr
-						scanNetInterfaceName = localNetworkInterface.Name
-						lanNames = append(lanNames, localNetworkInterface.Name)
-					}
-				}
-			}
-		}
-	}
+	fmt.Println(strings.Repeat("####", 5)+" IP ", networkInfo.IPNet.String())
 
-	fmt.Printf("%s interfaces : %v \n", strings.Repeat(">", 10), lanNames)
-	fmt.Printf("%s usage : go run main.go -interface=%s \n", strings.Repeat(">", 10), lanNames[0])
-	fmt.Printf("%s select interface : '%s'  >>> local ip net %s %s \n", strings.Repeat("-", 10), lanNames[0], localIPNet.String(), strings.Repeat("-", 10))
-	if localIPNet == nil || len(localMacAddress) == 0 {
+	if networkInfo.IPNet == nil || len(networkInfo.MAC.String()) == 0 {
 		log.Fatal("Cannot get the lan name or lan mac")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// listen the arp reply package
-	go listenARPPackets(scanNetInterfaceName, ctx, pushMachineInfoSignal)
+	go listenARPPackets(networkInfo.Name, ctx, pushMachineInfoSignal)
 
 	// send the arp package to all lan machine
 	go func() {
-		ips := network.IpRangeTable(localIPNet)
+		ips := network.IpRangeTable(networkInfo.IPNet)
 		for _, ip := range ips {
-			go sendArpPackage(ip, localIPNet, localMacAddress, scanNetInterfaceName)
+			go sendArpPackage(ip, networkInfo.IPNet, networkInfo.MAC, networkInfo.Name)
 		}
 	}()
 
 	go func() {
 		host, _ := os.Hostname()
-		//vendorInfo := manuf.Search(localMacAddress.String())
-		vendorInfo := macmap.Search(localMacAddress.String())
-		machines[localIPNet.IP.String()] = machineInfo{
-			MacAddress: localMacAddress,
+		//vendorInfo := manuf.Search(networkInfo.MAC.String())
+		vendorInfo := macmap.Search(networkInfo.MAC.String())
+		machines[networkInfo.IPNet.IP.String()] = machineInfo{
+			MacAddress: networkInfo.MAC,
 			Hostname:   strings.TrimSuffix(host, ".local"), FactoryInfo: vendorInfo,
 		}
 	}()
