@@ -1,23 +1,66 @@
-# Lan scan
+# LanScan
 
-## Purpose
+A Go-based network scanning tool that helps you discover devices on your local network.
 
-> Find out all the devices that are on the same network as you.
+## Features
 
-* Avoid equipment with hidden cameras
-* Find out the connection machine ip and mac for pinging it
+- 🔍 Scan and identify all devices on your local network
+- 📱 Display device information including IP and MAC addresses
+- 🏢 Show vendor information for discovered devices
+- 🔒 Help identify potential security concerns (e.g., hidden cameras)
+- 🚀 Fast and efficient scanning using Go
 
-## Network Knowledge
+## Prerequisites
 
-* Lan-network calculation. [Reference](https://blog.biyongyao.com/network/ip-subnet-mask.html)
+- Go 1.16 or higher
+- Root/sudo privileges (required for network scanning)
 
-## Usage
+## Installation
 
+```bash
+# Clone the repository
+git clone https://github.com/YaoMiss/go-lanscan.git
+
+# Build the project
+cd go-lanscan & go build
+
+# Run the scanner (requires sudo privileges)
+sudo ./lanscan-go
+sudo ./lanscan-go --interface=en0
 ```
-bash > git clone https://github.com/YaoMiss/go-lanscan.git
-bash > go build 
-bash > sudo ./lanscan-go 
-```
+
+## How It Works
+
+The tool uses network packet manipulation to:
+1. Calculate the local network range
+2. Send ARP requests to all possible hosts
+3. Collect and display responses with device information
+
+For more information about network calculations, check out this [subnet mask guide](https://blog.biyongyao.com/network/ip-subnet-mask.html).
+
+## Use Cases
+
+- Network Administration: Quickly identify all devices on a network
+- Security Auditing: Detect unauthorized devices
+- IoT Management: Find and manage IoT devices on your network
+- Troubleshooting: Verify network connectivity and device presence
+
+## Contributing
+
+Contributions are welcome! Here are some ways you can contribute:
+- Enhance vendor name mapping
+- Improve scanning performance
+- Add new features
+- Fix bugs
+- Improve documentation
+
+## License
+
+This project is open source and available under the MIT License.
+
+## Security Notice
+
+Please note that network scanning should only be performed on networks you own or have explicit permission to scan. Unauthorized scanning may be illegal in some jurisdictions.
 
 ## todo
 

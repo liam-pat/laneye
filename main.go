@@ -61,7 +61,7 @@ func main() {
 
 	// send the arp package to all lan machine
 	go func() {
-		ips := network.IpRangeTable(networkInfo.IPNet)
+		ips, _ := network.IPV4RangeTable(networkInfo.IPNet)
 		for _, ip := range ips {
 			go sendArpPackage(ip, networkInfo.IPNet, networkInfo.MAC, networkInfo.Name)
 		}
@@ -114,7 +114,7 @@ func listenARPPackets(listenInterfaceName string, context context.Context, pushM
 				//factoryInfo := manuf.Search(mac.String())
 				factoryInfo := macmap.Search(mac.String())
 
-				pushMachineInfo(network.ParseIP2Uint32(arp.SourceProtAddress).String(), mac, "", factoryInfo, pushMachineInfoSignal)
+				pushMachineInfo(network.ParseIPV44byte2Uint32(arp.SourceProtAddress).String(), mac, "", factoryInfo, pushMachineInfoSignal)
 			}
 		}
 	}
@@ -146,7 +146,11 @@ func pushMachineInfo(ip string, mac net.HardwareAddr, hostname, factoryInfo stri
 func printLanMachines() {
 	var ips network.IPSlice
 	for ip := range machines {
-		ips = append(ips, network.ParseString2Uint32(ip))
+		ip, err := network.ParseIPV4String2Uint32(ip)
+		if err != nil {
+			continue
+		}
+		ips = append(ips, ip)
 	}
 	fmt.Printf("%-15s %-20s %-30s %-10s\n", "ip", "mac", "hostname", "vendorname")
 	sort.Sort(ips)

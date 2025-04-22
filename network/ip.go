@@ -1,13 +1,13 @@
 package network
 
 import (
-	"bytes"
-	"math"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
 )
 
+type Uint32IP uint32
 type IPSlice []Uint32IP
 
 func (ip IPSlice) Len() int {
@@ -20,51 +20,75 @@ func (ip IPSlice) Less(i, j int) bool {
 	return ip[i] < ip[j]
 }
 
-type Uint32IP uint32
-
 func (ip Uint32IP) String() string {
-	var bf bytes.Buffer
+	builder := strings.Builder{}
+	builder.Grow(15) // xxx.xxx.xxx.xxx
 	for i := 1; i <= 4; i++ {
-		bf.WriteString(strconv.Itoa(int((ip >> ((4 - uint(i)) * 8)) & 0xff)))
+		builder.WriteString(strconv.Itoa(int((ip >> ((4 - uint(i)) * 8)) & 0xff)))
 		if i != 4 {
-			bf.WriteByte('.')
+			builder.WriteByte('.')
 		}
 	}
-	return bf.String()
+	return builder.String()
 }
 
-func IpRangeTable(localIpNet *net.IPNet) (lanNetworkIps []Uint32IP) {
+func IPV4RangeTable(localIpNet *net.IPNet) ([]Uint32IP, error) {
+	if localIpNet == nil {
+		return nil, fmt.Errorf("nil IPNet provided")
+	}
 	localIPV4 := localIpNet.IP.To4() //[4]byte
-
-	var minIpUint32, maxIpUint32 Uint32IP
-	maskSize, _ := localIpNet.Mask.Size()
-
-	// (192.168.10.200/24) ip -> 11111111.111111111.11111111.00000000  mask -> 00000000.00000000.00000000.11111111
-	// ip string 2 uint : (192 << 24) + (168 << 16) + (10 << 8) + (200 << 0) = 3232238280
-	// min : ip & mask
-	// min : min | ~mask
-	minIpUint32 = ParseIP2Uint32(localIPV4) & ParseIP2Uint32(localIpNet.Mask)
-
-	maxIpUint32 = minIpUint32 | Uint32IP(math.Pow(2, float64(32-maskSize)))
-
-	for ipUint32 := minIpUint32; ipUint32 < maxIpUint32; ipUint32++ {
-		if ipUint32&0x000000ff == 0 || ipUint32&0x000000ff == 255 {
-			continue
-		}
-		lanNetworkIps = append(lanNetworkIps, ipUint32)
+	if localIPV4 == nil {
+		return nil, fmt.Errorf("invalid IPv4 address")
 	}
-	return
+
+	var minIPV4, maxIPV4 Uint32IP
+
+	// 192.168.10.200/24.  first value is `24` , second value is `32`
+	_, bits := localIpNet.Mask.Size()
+	if bits != net.IPv4len*8 {
+		return nil, fmt.Errorf("unexpected mask size")
+	}
+	// 192.168.10.200/24
+	// ip   -> 11000000.10101000.00001010.xxxxxxxx
+	// mask -> 11111111.11111111.11111111.00000000
+	// min : ip & mask ; max : min | ~mask
+	minIPV4 = ParseIPV44byte2Uint32(localIPV4) & ParseIPV44byte2Uint32(localIpNet.Mask)
+	maxIPV4 = minIPV4 | ^ParseIPV44byte2Uint32(localIpNet.Mask)
+
+	var IPs []Uint32IP
+	IPs = make([]Uint32IP, 0, int(maxIPV4-minIPV4-1))
+	for IP := minIPV4 + 1; IP < maxIPV4; IP++ {
+		IPs = append(IPs, IP)
+	}
+	return IPs, nil
 }
 
-func ParseString2Uint32(s string) Uint32IP {
+func ParseIPV4String2Uint32(s string) (Uint32IP, error) {
 	var b []byte
-	for _, i := range strings.Split(s, ".") {
-		v, _ := strconv.Atoi(i)
+	b = make([]byte, 0, 4)
+	parts := strings.Split(s, ".")
+
+	if len(parts) != 4 {
+		return 0, fmt.Errorf("invalid IP format: %s", s)
+	}
+	for _, i := range parts {
+		v, err := strconv.Atoi(i)
+		if err != nil {
+			return 0, fmt.Errorf("invalid IP segment: %s", i)
+		}
+		if v < 0 || v > 255 {
+			return 0, fmt.Errorf("IP segment out of range: %d", v)
+		}
 		b = append(b, uint8(v))
 	}
-	return ParseIP2Uint32(b)
+	return ParseIPV44byte2Uint32(b), nil
 }
 
-func ParseIP2Uint32(b []byte) Uint32IP {
+func ParseIPV44byte2Uint32(b []byte) Uint32IP {
+	if len(b) != 4 {
+		return 0
+	}
+	// 192.168.10.200/24
+	// ip string 2 uint32 : (192 << 24) + (168 << 16) + (10 << 8) + (200 << 0) = 3232238280
 	return Uint32IP(Uint32IP(b[0])<<24 + Uint32IP(b[1])<<16 + Uint32IP(b[2])<<8 + Uint32IP(b[3]))
 }
