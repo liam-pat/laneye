@@ -1,4 +1,4 @@
-# LanScan
+# LANEYE
 
 A Go-based network scanning tool that helps you discover devices on your local network.
 
@@ -18,15 +18,10 @@ A Go-based network scanning tool that helps you discover devices on your local n
 ## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/YaoMiss/go-lanscan.git
+git clone https://github.com/liam-pat/laneye.git
+cd laneye & go build
 
-# Build the project
-cd go-lanscan & go build
-
-# Run the scanner (requires sudo privileges)
-sudo ./lanscan-go
-sudo ./lanscan-go --interface=en0
+sudo ./laneye --interface=en0
 ```
 
 ## How It Works
@@ -48,19 +43,10 @@ For more information about network calculations, check out this [subnet mask gui
 ## Contributing
 
 Contributions are welcome! Here are some ways you can contribute:
-- Enhance vendor name mapping
-- Improve scanning performance
-- Add new features
-- Fix bugs
-- Improve documentation
-
-## License
-
-This project is open source and available under the MIT License.
-
-## Security Notice
-
-Please note that network scanning should only be performed on networks you own or have explicit permission to scan. Unauthorized scanning may be illegal in some jurisdictions.
+- Enhance vendor name mapping.
+- Improve scanning performance.
+- Add new features.
+- Fix bugs.
 
 ## todo
 
