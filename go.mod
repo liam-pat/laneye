@@ -1,4 +1,4 @@
-module packie/lanscan-go
+module packie/laneye
 
 go 1.20
 
